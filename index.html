@@ -43,6 +43,12 @@
   button{font:inherit;font-size:18px;background:none;color:#e8e6e0;border:1px solid #e8e6e0;padding:10px 28px;cursor:pointer;margin-top:8px}
   button:hover{background:#e8e6e0;color:#000}
   #end h1{color:#d22;text-shadow:0 0 24px #600}
+  #vr-visor{position:fixed;inset:0;pointer-events:none;z-index:2;overflow:hidden;--chroma:1.5px;transition:opacity .45s ease}
+  #vr-visor svg.mask{position:absolute;inset:0;width:100%;height:100%}
+  #vr-visor .scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0px,rgba(0,0,0,0) 2px,rgba(0,22,26,.22) 3px,rgba(0,0,0,.34) 4px);mix-blend-mode:multiply}
+  #vr-visor .chroma{position:absolute;inset:0;box-shadow:inset calc(var(--chroma) * 3) 0 26px rgba(255,20,60,.2),inset calc(var(--chroma) * -3) 0 26px rgba(0,245,255,.2)}
+  #hmd-telemetry{position:fixed;top:18px;right:24px;z-index:3;pointer-events:none;text-align:right;font-size:12px;letter-spacing:2px;color:var(--ai);opacity:.82;text-shadow:0 0 8px rgba(0,0,0,.9);line-height:1.5}
+  #voice-wave{display:block;width:128px;height:20px;margin-top:6px;opacity:.88}
   .hidden{display:none!important}
 </style>
 <script type="importmap">
@@ -52,6 +58,30 @@
 <body>
 <canvas id="game"></canvas>
 <canvas id="noise" width="160" height="90"></canvas>
+<div id="vr-visor" class="hidden">
+  <div class="scanlines"></div>
+  <div class="chroma"></div>
+  <svg class="mask" viewBox="0 0 1600 900" preserveAspectRatio="none">
+    <defs>
+      <radialGradient id="hmdVig" cx="50%" cy="50%" r="54%">
+        <stop offset="58%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="86%" stop-color="#02080c" stop-opacity="0.58"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0.96"/>
+      </radialGradient>
+    </defs>
+    <rect width="1600" height="900" fill="url(#hmdVig)"/>
+    <path d="M0,0 H1600 V900 H0 Z M60,115 Q60,36 165,36 H1435 Q1540,36 1540,115 V785 Q1540,864 1435,864 H885 Q825,864 800,775 Q775,864 715,864 H165 Q60,864 60,785 Z" fill="#030508" fill-opacity="0.92" fill-rule="evenodd"/>
+    <path d="M60,115 Q60,36 165,36 H1435 Q1540,36 1540,115 V785 Q1540,864 1435,864 H885 Q825,864 800,775 Q775,864 715,864 H165 Q60,864 60,785 Z" fill="none" stroke="var(--ai)" stroke-opacity="0.34" stroke-width="2.2"/>
+    <g fill="none" stroke="var(--ai)" stroke-opacity="0.06" stroke-width="1.2" stroke-dasharray="10 16">
+      <circle cx="470" cy="450" r="240"/><circle cx="470" cy="450" r="350"/>
+      <circle cx="1130" cy="450" r="240"/><circle cx="1130" cy="450" r="350"/>
+    </g>
+  </svg>
+</div>
+<div id="hmd-telemetry" class="hidden">
+  <div id="hmd-sys">ЭХО OS v2.4 · НЕЙРОЛИНК</div>
+  <div id="hmd-stat">СИНХР 98% · ПУЛЬС 72 BPM</div>
+</div>
 <div id="stage" class="hidden"></div>
 <div id="cross" class="hidden"></div>
 <div id="prompt"></div>
@@ -63,7 +93,7 @@
   <div class="price">4 990 ₽</div>
   <div class="buy" id="buy">Заказать</div>
 </div>
-<div id="dlg" class="hidden"><div class="who"></div><div class="txt"></div></div>
+<div id="dlg" class="hidden"><div class="who"></div><div class="txt"></div><canvas id="voice-wave" width="128" height="20"></canvas></div>
 <div id="title"></div>
 <div id="boot" class="hidden"><b>ЭХО</b><div>загрузка виртуальной среды…</div><div class="bar"><i id="bootBar"></i></div></div>
 <div id="flash"></div>
@@ -75,7 +105,7 @@
   <p>Ему стало скучно, и он купил VR-шлем.<br>В шлеме его ждал ИИ-помощник.</p>
   <div class="keys">
     <b>WASD</b> — бежать · <b>Пробел</b> — прыжок · <b>Мышь</b> — смотреть<br>
-    <b>Enter</b> — пролистать реплику · <b>E</b> — действие
+    <b>Enter</b> — пролистать реплику · <b>E</b> — действие · <b>V</b> — озвучка · <b>H</b> — визор
   </div>
   <button id="start">Играть</button>
   <p class="keys">Нужны клавиатура и мышь. Лучше в наушниках.</p>
@@ -163,12 +193,42 @@ function makeHeadphones() {
   return g;
 }
 const visorMat = new THREE.MeshBasicMaterial({ color: 0x111818 });
+const visorStripMat = new THREE.MeshBasicMaterial({ color: 0x33dddd });
+const templeLedMat = new THREE.MeshBasicMaterial({ color: 0x33dddd });
 function makeHelmet() {
   const g = new THREE.Group();
-  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.32, 0.42), lowpoly(0x26282d)));
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.17, 0.04), visorMat); visor.position.z = 0.215; g.add(visor);
-  const strap = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.06, 0.3), lowpoly(0x18181a)); strap.position.set(0, 0.12, -0.08); g.add(strap);
+  const shellMat = lowpoly(0x23262e), trimMat = lowpoly(0x14161b);
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.31, 0.42), shellMat));
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.055, 0.44), trimMat); brow.position.set(0, 0.135, 0.01); g.add(brow);
+  const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.05, 0.38), trimMat); cheek.position.set(0, -0.135, 0.02); g.add(cheek);
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.18, 0.045), visorMat); visor.position.set(0, 0.01, 0.21); g.add(visor);
+  const scanBar = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.028, 0.052), visorStripMat); scanBar.position.set(0, 0.015, 0.215); g.add(scanBar);
+  const coreRing = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.009, 4, 12), visorStripMat); coreRing.position.set(0, 0.015, 0.236); g.add(coreRing);
+  for (const s of [-1, 1]) {
+    const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.08, 8), trimMat);
+    pod.rotation.z = Math.PI / 2; pod.position.set(s * 0.27, 0.01, 0.03); g.add(pod);
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.045, 0.14), templeLedMat);
+    led.position.set(s * 0.268, 0.01, 0.11); g.add(led);
+  }
+  const strap = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.055, 0.34), trimMat); strap.position.set(0, 0.02, -0.09); g.add(strap);
+  const topStrap = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, 0.44), trimMat); topStrap.position.set(0, 0.18, -0.02); g.add(topStrap);
+  const backDial = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.05, 8), shellMat);
+  backDial.rotation.x = Math.PI / 2; backDial.position.set(0, 0.01, -0.24); g.add(backDial);
   return g;
+}
+const fpHelmet = new THREE.Group();
+{
+  const bezelMat = new THREE.MeshBasicMaterial({ color: 0x05070a, depthTest: false });
+  const rimMat = new THREE.MeshBasicMaterial({ color: 0x22d0d0, transparent: true, opacity: 0.28, depthTest: false });
+  const topB = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.045, 0.08), bezelMat); topB.position.set(0, 0.135, -0.15); fpHelmet.add(topB);
+  const botB = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.045, 0.08), bezelMat); botB.position.set(0, -0.135, -0.15); fpHelmet.add(botB);
+  const noseB = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.075, 4), bezelMat); noseB.position.set(0, -0.11, -0.14); fpHelmet.add(noseB);
+  for (const s of [-1, 1]) {
+    const sideB = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28, 0.08), bezelMat); sideB.position.set(s * 0.21, 0, -0.15); fpHelmet.add(sideB);
+    const ledB = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.16, 0.02), rimMat); ledB.position.set(s * 0.182, 0, -0.14); fpHelmet.add(ledB);
+  }
+  fpHelmet.visible = false;
+  camera.add(fpHelmet);
 }
 
 // ---------- the square one: blocky white figure with a golden spear ----------
@@ -250,6 +310,7 @@ room.add(man.g);
 const phones = makeHeadphones();
 const sofaPhones = makeHeadphones(); sofaPhones.position.set(0.75, 0.5, -3.0); sofaPhones.rotation.x = -Math.PI / 2; room.add(sofaPhones);
 const helmet = makeHelmet();
+const tableHelmet = makeHelmet(); tableHelmet.position.set(-2.55, 0.99, -2.5); tableHelmet.rotation.y = 0.55; room.add(tableHelmet);
 const phoneMesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.02), new THREE.MeshBasicMaterial({ color: 0x88ccff }));
 phoneMesh.position.set(0, -0.62, 0.06); phoneMesh.rotation.x = Math.PI / 2;
 man.arms[1].add(phoneMesh);
@@ -265,6 +326,9 @@ function resetRoom() {
   pkg.visible = false; lid.position.set(0, 0.53, 0); lid.rotation.set(0, 0, 0);
   if (helmet.parent) helmet.parent.remove(helmet);
   visorMat.color.setHex(0x111818);
+  visorStripMat.color.setHex(0x33dddd);
+  templeLedMat.color.setHex(0x33dddd);
+  tableHelmet.visible = (state === 'menu');
   lamp.intensity = 9; roomHemi.intensity = 0.8;
 }
 resetRoom();
@@ -296,6 +360,7 @@ function updateNotes(dt) {
 // VR WORLD
 // =====================================================================
 const vr = new THREE.Scene();
+vr.add(camera);
 vr.fog = new THREE.FogExp2(0xffffff, 0.01);
 const vrHemi = new THREE.HemisphereLight(0xffffff, 0x444455, 1.0); vr.add(vrHemi);
 const vrDir = new THREE.DirectionalLight(0xffffff, 0.8); vrDir.position.set(3, 10, 4); vr.add(vrDir);
@@ -442,6 +507,7 @@ function buildStage(i) {
       const wz = onPath ? p.z : p.z + R(-2, 2);
       const wy = onPath ? p.top : p.top + R(-1, 2);
       const w = makeMan(i === 4 ? 0xff1010 : 0x111111, i === 4);
+      const wh = makeHelmet(); wh.position.set(0, 0.04, 0.02); w.head.add(wh);
       w.g.position.set(wx, wy, wz);
       stageGroup.add(w.g);
       if (!onPath) {
@@ -538,7 +604,10 @@ function applyStageLook(c) {
   setGrid(c.grid);
   decorMat.color.setHex(c.decor);
   aiEyeMat.color.setHex(c.ai);
+  visorStripMat.color.setHex(c.ai);
+  templeLedMat.color.setHex(c.ai);
   document.documentElement.style.setProperty('--ai', '#' + c.ai.toString(16).padStart(6, '0'));
+  $('vr-visor').style.setProperty('--chroma', (1.4 + (c.glitch || 0) * 5.2).toFixed(2) + 'px');
 }
 
 // =====================================================================
@@ -627,10 +696,73 @@ function sfx(name) {
     case 'stomp': tone(t0, 55, 0.15, 'sine', 0.35); noise(t0, 0.1, 0.15, 'lowpass', 300); break;
   }
 }
-function beep() {
+let voiceEnabled = true, vrVisorEnabled = true, ruVoice = null;
+const FORMANTS = {
+  'а': [780, 1280], 'я': [760, 1450], 'о': [480, 880], 'ё': [460, 1100],
+  'у': [320, 680], 'ю': [320, 950], 'э': [560, 1760], 'е': [520, 1920],
+  'и': [290, 2240], 'ы': [340, 1520]
+};
+function loadVoices() {
+  if (!('speechSynthesis' in window)) return;
+  const vs = speechSynthesis.getVoices();
+  ruVoice = vs.find(v => /ru/i.test(v.lang) && /google|milena|irina|pavel|yuri|katya/i.test(v.name)) || vs.find(v => /ru/i.test(v.lang)) || vs[0] || null;
+}
+if ('speechSynthesis' in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+
+function speakLine(text, who) {
+  if (!voiceEnabled || !('speechSynthesis' in window) || !text) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    if (ruVoice) u.voice = ruVoice;
+    u.lang = 'ru-RU';
+    if (who === 'ЭХО') {
+      u.pitch = clamp([1.18, 1.08, 0.92, 0.68, 0.42][stage] - (dlg.glitch || 0) * 0.2, 0.25, 1.6);
+      u.rate = clamp([1.05, 1.02, 0.95, 0.88, 0.78][stage], 0.65, 1.3);
+      u.volume = 0.95;
+    } else {
+      u.pitch = 0.88; u.rate = 0.96; u.volume = 0.85;
+    }
+    speechSynthesis.speak(u);
+  } catch {}
+}
+
+function beep(ch = 'а', who = 'ЭХО') {
   if (!ac) return;
-  const base = [760, 700, 520, 300, 140][stage];
-  tone(ac.currentTime, base + rand(0, 160), 0.05, stage >= 3 ? 'sawtooth' : 'square', 0.03);
+  const t0 = ac.currentTime;
+  const low = (ch || 'а').toLowerCase();
+  const [f1, f2] = FORMANTS[low] || [540, 1450];
+  const base = who === 'ЭХО' ? [230, 210, 175, 130, 88][stage] : 145;
+  const carrier = ac.createOscillator(), sub = ac.createOscillator();
+  const bp1 = ac.createBiquadFilter(), bp2 = ac.createBiquadFilter(), g = ac.createGain();
+  carrier.type = stage >= 3 && who === 'ЭХО' ? 'sawtooth' : 'square';
+  sub.type = 'triangle';
+  carrier.frequency.setValueAtTime(base + rand(-14, 18), t0);
+  sub.frequency.setValueAtTime(base * 0.5, t0);
+  bp1.type = 'bandpass'; bp1.frequency.setValueAtTime(f1, t0); bp1.Q.value = 4.5;
+  bp2.type = 'bandpass'; bp2.frequency.setValueAtTime(f2, t0); bp2.Q.value = 5.5;
+  const vol = voiceEnabled ? 0.032 : 0.018;
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.075);
+  carrier.connect(bp1); carrier.connect(bp2); sub.connect(bp1);
+  bp1.connect(g); bp2.connect(g); g.connect(master);
+  carrier.start(t0); sub.start(t0);
+  carrier.stop(t0 + 0.08); sub.stop(t0 + 0.08);
+}
+
+const wctx = $('voice-wave').getContext('2d');
+function drawVoiceWave() {
+  wctx.clearRect(0, 0, 128, 20);
+  const active = dlg.cur && (dlg.n < dlg.cur.text.length || ('speechSynthesis' in window && speechSynthesis.speaking));
+  wctx.strokeStyle = dlg.cur && dlg.cur.who === 'ЭХО' ? (getComputedStyle(document.documentElement).getPropertyValue('--ai').trim() || '#3dd') : '#a8a298';
+  wctx.lineWidth = 1.5;
+  wctx.beginPath();
+  for (let x = 0; x < 128; x += 3) {
+    const amp = active ? (Math.sin(t * 28 + x * 0.35) * 4.5 + Math.cos(t * 43 - x * 0.2) * 3.5) * (1 + (dlg.glitch || 0) * 0.6) : 0.6 * Math.sin(t * 4 + x * 0.1);
+    const y = 10 + clamp(amp, -8, 8);
+    if (x === 0) wctx.moveTo(x, y); else wctx.lineTo(x, y);
+  }
+  wctx.stroke();
 }
 
 // =====================================================================
@@ -640,7 +772,7 @@ const dlg = { q: [], cur: null, n: 0, hold: 0, glitch: 0 };
 function say(lines, who = 'ЭХО', cb) {
   lines.forEach((text, i) => dlg.q.push({ text, who, cb: i === lines.length - 1 ? cb : null }));
 }
-function clearDialog() { dlg.q = []; dlg.cur = null; hide('dlg'); }
+function clearDialog() { dlg.q = []; dlg.cur = null; if ('speechSynthesis' in window) { try { speechSynthesis.cancel(); } catch {} } hide('dlg'); }
 const GLYPHS = '█▓▒░#@%&?!';
 function updateDialog(dt) {
   if (!dlg.cur) {
@@ -648,21 +780,24 @@ function updateDialog(dt) {
     dlg.cur = dlg.q.shift(); dlg.n = 0; dlg.hold = 0;
     show('dlg');
     $('dlg').classList.toggle('narr', dlg.cur.who === '');
-    $('dlg').querySelector('.who').textContent = dlg.cur.who || '…';
+    $('dlg').querySelector('.who').textContent = dlg.cur.who ? (dlg.cur.who === 'ЭХО' ? 'ЭХО · ГОЛОСОВОЙ СИНТЕЗ' : dlg.cur.who) : 'ВНУТРЕННИЙ ГОЛОС';
+    speakLine(dlg.cur.text, dlg.cur.who);
   }
   const c = dlg.cur, len = c.text.length;
   if ($('dlg').classList.contains('hidden')) show('dlg');
   if (dlg.n < len) {
     const before = Math.floor(dlg.n);
-    dlg.n = Math.min(len, dlg.n + dt * 32);
-    if (c.who === 'ЭХО' && Math.floor(dlg.n) !== before && Math.floor(dlg.n) % 2 === 0 && c.text[before] !== ' ') beep();
+    dlg.n = Math.min(len, dlg.n + dt * 28);
+    if (Math.floor(dlg.n) !== before && Math.floor(dlg.n) % 2 === 0 && c.text[before] !== ' ') beep(c.text[before], c.who);
   } else {
     dlg.hold += dt;
-    if (dlg.hold > 1.5 + len * 0.035) { const cb = c.cb; dlg.cur = null; if (cb) cb(); return; }
+    const speaking = voiceEnabled && ('speechSynthesis' in window) && speechSynthesis.speaking && dlg.hold < 5.5;
+    if (!speaking && dlg.hold > 1.5 + len * 0.038) { const cb = c.cb; dlg.cur = null; if (cb) cb(); return; }
   }
   let txt = c.text.slice(0, Math.floor(dlg.n));
   if (c.who === 'ЭХО' && dlg.glitch > 0) txt = [...txt].map(ch => ch !== ' ' && Math.random() < dlg.glitch * 0.07 ? GLYPHS[Math.random() * GLYPHS.length | 0] : ch).join('');
   $('dlg').querySelector('.txt').textContent = txt;
+  drawVoiceWave();
 }
 const aiTalking = () => dlg.cur && dlg.cur.who === 'ЭХО' && dlg.n < dlg.cur.text.length;
 function advanceDialog() {
@@ -855,6 +990,7 @@ const OUTRO = [
 ];
 
 function startIntro() {
+  tableHelmet.visible = false;
   show('skip');
   runCutscene(INTRO, () => {
     hide('skip'); hide('boot');
@@ -1233,6 +1369,17 @@ addEventListener('keydown', e => {
   if (e.code === 'Enter') { if (state === 'cut' && shots === INTRO && !dlg.cur) skipIntro(); else advanceDialog(); }
   if ((state === 'play' || state === 'run') && e.code === 'Space') P.jumpBuf = 0.13;
   if (state === 'ending' && e.code === 'KeyE') tryRemove();
+  if (e.code === 'KeyV') {
+    voiceEnabled = !voiceEnabled;
+    if (!voiceEnabled && 'speechSynthesis' in window) { try { speechSynthesis.cancel(); } catch {} }
+    $('prompt').textContent = voiceEnabled ? 'ОЗВУЧКА: ВКЛ [V]' : 'ОЗВУЧКА: ВЫКЛ [V]';
+    setTimeout(() => { if ($('prompt').textContent.includes('ОЗВУЧКА')) $('prompt').textContent = allowRemove ? '[E] СНЯТЬ ШЛЕМ' : ''; }, 1400);
+  }
+  if (e.code === 'KeyH') {
+    vrVisorEnabled = !vrVisorEnabled;
+    $('prompt').textContent = vrVisorEnabled ? 'ВИЗОР ШЛЕМА «ЭХО»: ВКЛ [H]' : 'ВИЗОР ШЛЕМА «ЭХО»: ВЫКЛ [H]';
+    setTimeout(() => { if ($('prompt').textContent.includes('ВИЗОР')) $('prompt').textContent = allowRemove ? '[E] СНЯТЬ ШЛЕМ' : ''; }, 1400);
+  }
   if (e.code === 'Escape' && noLock) pauseGame();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
@@ -1297,12 +1444,25 @@ function loop() {
   } else if (state === 'trans') {
     updateDialog(dt);
   }
+  if (state === 'menu' && tableHelmet.visible) {
+    tableHelmet.rotation.y = 0.55 + Math.sin(t * 1.4) * 0.18;
+    tableHelmet.position.y = 0.99 + Math.sin(t * 2.2) * 0.025;
+  }
+  const inHMD = (activeScene === vr && state !== 'cut') || (state === 'cut' && shots === INTRO && shotI === 5 && shotT > 2.2) || (state === 'cut' && shots === OUTRO && shotI === 0 && shotT < 0.7);
+  $('vr-visor').classList.toggle('hidden', !(inHMD && vrVisorEnabled));
+  $('hmd-telemetry').classList.toggle('hidden', !(activeScene === vr && state !== 'cut' && vrVisorEnabled));
+  fpHelmet.visible = !!(activeScene === vr && state !== 'cut' && vrVisorEnabled);
   if (activeScene === vr && state !== 'cut') {
     shake = Math.max(0, shake - dt);
     const sh = shake + spike * 0.15;
     camera.position.set(P.x, P.y + 1.6 + (P.ground ? Math.sin(bob) * 0.04 : 0), P.z);
     camera.rotation.set(pitch + rand(-sh, sh) * 0.1, yaw + rand(-sh, sh) * 0.1, rand(-sh, sh) * 0.15);
     pLight.position.set(P.x, P.y + 2, P.z);
+    const bpm = Math.round(72 + stage * 18 + spike * 45 + (state === 'ending' || state === 'kill' || state === 'run' ? 38 : 0) + Math.sin(t * 3) * 4);
+    const sync = Math.min(100, Math.round(96 + stage * 1 + (state === 'ending' || state === 'kill' || state === 'run' ? 4 : 0)));
+    $('hmd-sys').textContent = state === 'run' ? 'ЭХО OS · КРИТИЧЕСКИЙ СБОЙ' : (state === 'ending' || state === 'kill' ? 'ЭХО OS · БЛОКИРОВКА ЗАМКА' : `ЭХО OS v2.4 · НЕЙРОЛИНК [V:${voiceEnabled ? 'ВКЛ' : 'ВЫКЛ'}]`);
+    $('hmd-stat').textContent = `СИНХР ${sync}% · ПУЛЬС ${bpm} BPM`;
+    $('vr-visor').style.setProperty('--chroma', (1.4 + (cfg.glitch || 0) * 5.2 + spike * 8).toFixed(2) + 'px');
   }
   renderer.render(activeScene, camera);
 }
