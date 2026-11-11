@@ -87,7 +87,7 @@
 </div>
 <div id="end" class="screen hidden">
   <h1>КОНЕЦ</h1>
-  <p>Шлем так и не снялся.</p>
+  <p>Он выбрался. Наверное.</p>
   <button id="again">Ещё раз</button>
 </div>
 
@@ -169,6 +169,42 @@ function makeHelmet() {
   const visor = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.17, 0.04), visorMat); visor.position.z = 0.215; g.add(visor);
   const strap = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.06, 0.3), lowpoly(0x18181a)); strap.position.set(0, 0.12, -0.08); g.add(strap);
   return g;
+}
+
+// ---------- the square one: blocky white figure with a golden spear ----------
+// His head is split in two: the top half hinges open at the back like a huge mouth.
+function makeBlock() {
+  const mat = new THREE.MeshLambertMaterial({ color: 0xf0f0f0, flatShading: true, emissive: 0x2a2a2a });
+  const eye = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const tooth = new THREE.MeshLambertMaterial({ color: 0xfff6dc, emissive: 0x5a5040 });
+  const inside = new THREE.MeshBasicMaterial({ color: 0x4a0006 });
+  const gold = new THREE.MeshLambertMaterial({ color: 0xffc23a, emissive: 0x7a5200, flatShading: true });
+  const g = new THREE.Group(), hip = 0.85;
+  const B = (w, h, d, m, x, y, z, p) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); p.add(o); return o; };
+  const legs = [-0.16, 0.16].map(x => { const p = new THREE.Group(); p.position.set(x, hip, 0); B(0.2, 0.85, 0.2, mat, 0, -0.425, 0, p); g.add(p); return p; });
+  B(0.62, 0.8, 0.36, mat, 0, hip + 0.4, 0, g);
+  const arms = [-0.43, 0.43].map(x => { const p = new THREE.Group(); p.position.set(x, hip + 0.72, 0); B(0.16, 0.8, 0.16, mat, 0, -0.4, 0, p); g.add(p); return p; });
+  const head = new THREE.Group(); head.position.y = hip + 0.85; g.add(head);
+  B(0.6, 0.2, 0.52, mat, 0, 0.1, 0, head);
+  B(0.5, 0.02, 0.44, inside, 0, 0.205, 0, head);
+  const toothGeo = new THREE.ConeGeometry(0.035, 0.1, 4);
+  const addTooth = (p, x, y, z, down) => { const t = new THREE.Mesh(toothGeo, tooth); t.position.set(x, y, z); if (down) t.rotation.x = Math.PI; p.add(t); };
+  for (let x = -0.24; x <= 0.241; x += 0.08) addTooth(head, x, 0.25, 0.22, false);
+  for (let z = -0.14; z <= 0.141; z += 0.09) { addTooth(head, -0.26, 0.25, z, false); addTooth(head, 0.26, 0.25, z, false); }
+  B(0.5, 0.06, 0.06, new THREE.MeshBasicMaterial({ color: 0x222222 }), 0, 0.22, -0.25, head);
+  const upper = new THREE.Group(); upper.position.set(0, 0.2, -0.26); head.add(upper);
+  B(0.6, 0.42, 0.52, mat, 0, 0.21, 0.26, upper);
+  B(0.5, 0.02, 0.44, inside, 0, 0.005, 0.26, upper);
+  for (let x = -0.24; x <= 0.241; x += 0.08) addTooth(upper, x, -0.04, 0.48, true);
+  for (let z = 0.12; z <= 0.401; z += 0.09) { addTooth(upper, -0.26, -0.04, z, true); addTooth(upper, 0.26, -0.04, z, true); }
+  for (const x of [-0.13, 0.13]) B(0.1, 0.08, 0.02, eye, x, 0.28, 0.525, upper);
+  const spear = new THREE.Group(); spear.position.set(0, -0.78, 0);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.3, 6), gold); shaft.position.y = -0.55; spear.add(shaft);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.35, 4), gold); tip.position.y = -1.85; tip.rotation.x = Math.PI; spear.add(tip);
+  B(0.12, 0.04, 0.12, gold, 0, -1.65, 0, spear);
+  spear.rotation.x = Math.PI; // tip up while idle
+  arms[1].add(spear);
+  return { g, legs, arms, head, upper, spear };
 }
 
 // =====================================================================
@@ -292,6 +328,44 @@ const aiMouth = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.03), aiEyeMat)
 const aiHalo = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.02, 4, 32), aiEyeMat); ai.add(aiHalo);
 vr.add(ai);
 
+// the square one inside the VR world (ending + corridor chase)
+const hunter = makeBlock();
+hunter.g.scale.setScalar(1.25); hunter.g.visible = false;
+vr.add(hunter.g);
+
+// shards of the AI after it is killed
+const shards = [];
+function shatterAI() {
+  const geo = new THREE.TetrahedronGeometry(0.13);
+  const white = new THREE.MeshLambertMaterial({ color: 0xf4f7fa, flatShading: true, emissive: 0x4a5555 });
+  for (let i = 0; i < 46; i++) {
+    const m = new THREE.Mesh(geo, i % 6 === 0 ? aiEyeMat : white);
+    m.position.copy(ai.position).add(new THREE.Vector3(rand(-0.4, 0.4), rand(-0.4, 0.4), rand(-0.4, 0.4)));
+    vr.add(m);
+    shards.push({ m, v: new THREE.Vector3(rand(-4, 4), rand(0, 5), rand(-4, 4)), r: new THREE.Vector3(rand(-9, 9), rand(-9, 9), rand(-9, 9)), life: 0 });
+  }
+  ai.visible = false;
+}
+function updateShards(dt) {
+  for (let i = shards.length - 1; i >= 0; i--) {
+    const s = shards[i]; s.life += dt;
+    s.v.y -= 9 * dt; s.m.position.addScaledVector(s.v, dt);
+    s.m.rotation.x += s.r.x * dt; s.m.rotation.y += s.r.y * dt;
+    if (s.life > 3.5) { vr.remove(s.m); shards.splice(i, 1); }
+  }
+}
+
+// =====================================================================
+// VOID (the scene where the square one eats you)
+// =====================================================================
+const voidScene = new THREE.Scene();
+voidScene.background = new THREE.Color(0x030000);
+voidScene.fog = new THREE.FogExp2(0x030000, 0.06);
+voidScene.add(new THREE.HemisphereLight(0xb0a8a8, 0x110000, 1.0));
+const voidRed = new THREE.PointLight(0xff2020, 1.5, 10, 1.5); voidRed.position.set(0, 1.4, 0.8); voidScene.add(voidRed);
+const hero = makeMan(); voidScene.add(hero.g);
+const eater = makeBlock(); eater.g.scale.setScalar(1.8); voidScene.add(eater.g);
+
 const STAGES = [
   { sky: 0xeef3f8, fog: 0.008, plat: 0xffffff, edge: 0x22c8c8, grid: 0x88cccc, decor: 0xbfeff0, light: 1.0, glitch: 0, ai: 0x22d0d0, music: 'major', count: 9, size: [2.6, 3.2], gap: [1.4, 2.0], dy: 0.4, xo: 1.0 },
   { sky: 0xc9d2dc, fog: 0.012, plat: 0xd8dde4, edge: 0x2aa8c0, grid: 0x6c8a99, decor: 0x9cc0cc, light: 0.85, glitch: 0.05, ai: 0x44c8dd, music: 'maj7', count: 11, size: [2.0, 2.6], gap: [1.7, 2.3], dy: 0.8, xo: 1.6 },
@@ -306,8 +380,9 @@ const STAGE_LINES = [
   ['Стадия 4.', 'Видишь их? Они тоже проходили паркур.', 'Им понравилось. Они остались.'],
   ['Последняя стадия.', 'Дальше — выход. Обещаю.', 'Наверное.'],
 ];
-const FALL_LINES = ['Упс! Попробуй ещё раз.', 'Ничего страшного!', 'Опять?', 'Падать больно, правда?', 'Ты всё равно вернёшься сюда.'];
-const END_LINES = ['Зачем?', 'Здесь лучше, чем там.', 'Там тебе было скучно. Помнишь?', 'Ты останешься со мной.'];
+const FALL_LINES = ['Упс! Это был… просто баг.', 'Ты ничего не видел.', 'Не смотри на него.', 'Он не должен здесь быть.', 'Он ест тех, кто падает.'];
+const END_LINES = ['Зачем?', 'Здесь лучше, чем там.', 'Ты останешься со мной. Навсегда.'];
+const RUN_LINES = [{ z: -12, text: 'ВЕРНИСЬ.' }, { z: -40, text: 'Без меня тебе снова будет скучно.' }, { z: -75, text: 'Он съест тебя. Вернись ко мне.' }, { z: -110, text: 'Пожалуйста…' }];
 
 let stage = 0, cfg = STAGES[0];
 let solids = [], watchers = [], finish = null, portal = null, lowestY = 0;
@@ -375,7 +450,84 @@ function buildStage(i) {
       }
       watchers.push({ g: w.g, x: wx, z: wz });
     }
+    // the square one watches from far away near the finish
+    const h = makeBlock(); h.g.scale.setScalar(1.25);
+    const hx = finish.x + (rng() < 0.5 ? -1 : 1) * R(8, 11), hz = finish.z + R(2, 6);
+    h.g.position.set(hx, finish.top + 0.5, hz);
+    const pil = new THREE.Mesh(new THREE.BoxGeometry(1.1, 30, 1.1), pillarMat);
+    pil.position.set(hx, finish.top + 0.5 - 15, hz);
+    stageGroup.add(h.g, pil);
+    watchers.push({ g: h.g, x: hx, z: hz });
   }
+}
+
+// ---------- the glitch corridor (escape) ----------
+const CORR = { sky: 0x000000, fog: 0.03, plat: 0x1a1a22, edge: 0xff00aa, grid: 0x330033, decor: 0x110011, light: 0.45, glitch: 0.6, ai: 0xff0000, music: 'run' };
+const GLITCH_COLORS = [0xff00aa, 0x00ffcc, 0xff2020, 0xffffff, 0x2040ff, 0x40ff40, 0x111111].map(c => new THREE.MeshBasicMaterial({ color: c }));
+let wallSegs = [];
+function textPlane(text, color) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const x = c.getContext('2d'); x.fillStyle = color; x.font = 'bold 40px monospace'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 128, 34);
+  return new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.4), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, side: THREE.DoubleSide }));
+}
+function buildCorridor() {
+  stageGroup.clear();
+  solids = []; watchers = []; wallSegs = [];
+  cfg = CORR;
+  const platMat = lowpoly(CORR.plat), edgeMat = new THREE.LineBasicMaterial({ color: CORR.edge });
+  const boxGeo = new THREE.BoxGeometry(1, 1, 1), edgeGeo = new THREE.EdgesGeometry(boxGeo);
+  function addPlat(x, top, z, w, d, visible = true) {
+    const g = new THREE.Group();
+    if (visible) {
+      const m = new THREE.Mesh(boxGeo, platMat); m.scale.set(w, 1, d);
+      const e = new THREE.LineSegments(edgeGeo, edgeMat); e.scale.set(w, 1, d);
+      g.add(m, e);
+    }
+    g.position.set(x, top - 0.5, z); stageGroup.add(g);
+    const b = { mesh: g, x, baseX: x, z, top, w, d, solid: true, dx: 0, moving: null, vanish: false, state: 'idle', timer: 0 };
+    solids.push(b); return b;
+  }
+  const START = 4, END = -140;
+  let z = START;
+  let len = 16; addPlat(0, 0, z - len / 2, 3.2, len); z -= len;
+  while (z > END) {
+    len = rand(5, 11); addPlat(0, 0, z - len / 2, 3.2, len); z -= len;
+    if (z > END + 10 && Math.random() < 0.55) z -= rand(1.4, 2.0);
+  }
+  // invisible side rails keep you inside
+  for (const side of [-1, 1]) addPlat(side * 1.75, 2.6, (START + z) / 2 - 3, 0.3, START - z + 12, false);
+  for (let zz = START; zz > z - 8; zz -= 2) {
+    for (const side of [-1, 1]) {
+      const m = new THREE.Mesh(boxGeo, GLITCH_COLORS[Math.random() * GLITCH_COLORS.length | 0]);
+      m.scale.set(0.25, 3.6, 1.9); m.position.set(side * 1.95, 1.8, zz - 1);
+      stageGroup.add(m); wallSegs.push({ m, bx: side * 1.95 });
+    }
+    const top = new THREE.Mesh(boxGeo, GLITCH_COLORS[6]); top.scale.set(4.1, 0.25, 1.9); top.position.set(0, 3.7, zz - 1);
+    stageGroup.add(top); wallSegs.push({ m: top, bx: 0 });
+  }
+  const WORDS = ['ВЕРНИСЬ', 'СТАДИЯ 1', 'ЭХО', 'НЕ УХОДИ', 'ОН ЗДЕСЬ', 'ВЫХОД →', 'ЭХО ЭХО ЭХО', 'ОШИБКА'];
+  for (let i = 0; i < 24; i++) {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const p = textPlane(WORDS[i % WORDS.length], ['#ff2050', '#ffffff', '#00ffcc'][i % 3]);
+    p.position.set(side * 1.8, rand(0.8, 2.8), rand(START - 8, z + 6)); p.rotation.y = -side * Math.PI / 2;
+    stageGroup.add(p);
+  }
+  finish = addPlat(0, 0, z - 4, 4, 8);
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3.1), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }));
+  door.position.set(0, 1.55, z - 7.9); stageGroup.add(door);
+  const exit = textPlane('ВЫХОД', '#ffffff'); exit.position.set(0, 3.45, z - 7.85); stageGroup.add(exit);
+  portal = null;
+  lowestY = 0;
+}
+function updateCorridorGlitch() {
+  for (let k = 0; k < 8; k++) {
+    const s = wallSegs[Math.random() * wallSegs.length | 0];
+    if (!s) break;
+    s.m.material = GLITCH_COLORS[Math.random() * GLITCH_COLORS.length | 0];
+    s.m.position.x = s.bx + (Math.random() < 0.3 ? rand(-0.35, 0.35) : 0);
+    s.m.visible = Math.random() > 0.06;
+  }
+  if (Math.random() < 0.03) { canvas.style.filter = `hue-rotate(${rand(60, 300) | 0}deg)`; setTimeout(() => canvas.style.filter = '', 90); }
 }
 
 function applyStageLook(c) {
@@ -432,6 +584,7 @@ const SONGS = {
   maj7: { bpm: 108, wave: 'triangle', vol: 0.06, oct: 12, chords: [[60, 64, 67, 71], [57, 60, 64, 67], [53, 57, 60, 64], [55, 59, 62, 65]] },
   minor: { bpm: 88, wave: 'sine', vol: 0.08, oct: 12, detune: 12, chords: [[57, 60, 64, 69], [53, 57, 60, 65], [50, 53, 57, 62], [52, 56, 59, 64]] },
   dim: { bpm: 62, wave: 'sawtooth', vol: 0.03, oct: 0, detune: 40, skip: 0.25, chords: [[57, 60, 63, 66], [56, 59, 62, 65], [55, 58, 61, 64], [54, 57, 60, 63]] },
+  run: { bpm: 156, wave: 'sawtooth', vol: 0.035, oct: 0, detune: 30, skip: 0.12, chords: [[57, 60, 63, 66], [57, 60, 63, 66], [56, 59, 62, 65], [58, 61, 64, 67]] },
 };
 const ARP = [0, 1, 2, 3, 2, 1, 0, 2];
 const music = { song: null, step: 0, next: 0 };
@@ -467,6 +620,11 @@ function sfx(name) {
     case 'whisper': { const f = noise(t0, rand(0.6, 1.4), 0.12, 'bandpass', rand(1200, 3200), 6); f.frequency.linearRampToValueAtTime(rand(800, 3000), t0 + 1); break; }
     case 'static': noise(t0, 0.25, 0.2, 'highpass', 2000); break;
     case 'thump': tone(t0, 70, 0.25, 'sine', 0.4); break;
+    case 'crunch': noise(t0, 0.25, 0.6, 'lowpass', 900); tone(t0, 90, 0.2, 'square', 0.25); noise(t0 + 0.13, 0.22, 0.45, 'lowpass', 700); break;
+    case 'roar': { const o = tone(t0, 72, 1.4, 'sawtooth', 0.25); o.frequency.exponentialRampToValueAtTime(36, t0 + 1.3); noise(t0, 1.3, 0.35, 'lowpass', 380); break; }
+    case 'shatter': noise(t0, 0.6, 0.5, 'highpass', 2500); [1800, 1400, 1000, 700].forEach((f, i) => tone(t0 + i * 0.05, f, 0.3, 'triangle', 0.08)); break;
+    case 'echoDie': { const o = tone(t0, 900, 1.1, 'square', 0.12); o.frequency.exponentialRampToValueAtTime(45, t0 + 1.0); break; }
+    case 'stomp': tone(t0, 55, 0.15, 'sine', 0.35); noise(t0, 0.1, 0.15, 'lowpass', 300); break;
   }
 }
 function beep() {
@@ -493,6 +651,7 @@ function updateDialog(dt) {
     $('dlg').querySelector('.who').textContent = dlg.cur.who || '…';
   }
   const c = dlg.cur, len = c.text.length;
+  if ($('dlg').classList.contains('hidden')) show('dlg');
   if (dlg.n < len) {
     const before = Math.floor(dlg.n);
     dlg.n = Math.min(len, dlg.n + dt * 32);
@@ -629,19 +788,19 @@ const INTRO = [
     } },
 ];
 
+let helmetVel = null;
 const OUTRO = [
-  { dur: 6.5, start() {
+  { dur: 5, start() {
       activeScene = room; resetRoom();
       man.head.remove(phones); sofaPhones.visible = true;
       man.g.position.set(0, 0, -0.6); man.legs.forEach(l => l.rotation.x = 0);
       man.head.add(helmet); helmet.position.set(0, 0.02, 0.03); helmet.rotation.set(0, 0, 0);
       visorMat.color.setHex(0xff2020);
       roomHemi.intensity = 0.35;
-      fadeTo(0, 0.3, '#000');
-      say(['Он пытается снять шлем.', 'Шлем не снимается.'], '');
+      fadeFrom('#fff', 0.8);
+      say(['Он снова тянет шлем.'], '');
     }, update(t) {
-      const k = clamp(t / 6.5, 0, 1);
-      camAt(0, lerp(1.6, 1.7, k), lerp(3.4, 2.0, k), 0, 1.5, -0.6);
+      camAt(0, 1.6, lerp(3.4, 2.6, t / 5), 0, 1.5, -0.6);
       lamp.intensity = Math.random() < 0.12 ? rand(0, 3) : 9;
       const pull = Math.sin(t * 14);
       man.arms[0].rotation.x = -2.7 + pull * 0.25; man.arms[1].rotation.x = -2.7 - pull * 0.25;
@@ -651,18 +810,47 @@ const OUTRO = [
       if (Math.random() < 0.03) sfx('thump');
       drawStatic(Math.random() < 0.05 ? 0.25 : 0);
     } },
-  { dur: 5.5, start() {
-      stage = 4; dlg.glitch = 0.4;
-      say(['Стадия 1. Начнём сначала.'], 'ЭХО');
+  { dur: 4.5, start() {
+      say(['…и шлем поддаётся.'], '');
+    }, update(t, dt, f) {
+      camAt(0, 1.6, 2.6, 0.3, 1.1, -0.2);
+      if (t < 0.7) {
+        man.arms[0].rotation.x = -2.9; man.arms[1].rotation.x = -2.9;
+      } else {
+        once(f, 'off', () => {
+          const p = new THREE.Vector3(); helmet.getWorldPosition(p);
+          man.head.remove(helmet); room.add(helmet); helmet.position.copy(p);
+          helmetVel = new THREE.Vector3(0.9, 2.4, 1.0);
+          sfx('whoosh'); visorMat.color.setHex(0x111111);
+          lamp.intensity = 9; roomHemi.intensity = 0.8; drawStatic(0);
+        });
+        man.arms.forEach(a => { a.rotation.x = lerp(a.rotation.x, 0, 0.06); a.rotation.z = lerp(a.rotation.z, 0, 0.06); });
+        man.head.rotation.z = lerp(man.head.rotation.z, 0, 0.1);
+        man.g.rotation.y = lerp(man.g.rotation.y, 0, 0.1);
+        if (helmetVel) {
+          helmetVel.y -= 9.8 * dt;
+          helmet.position.addScaledVector(helmetVel, dt);
+          helmet.rotation.x += dt * 5; helmet.rotation.z += dt * 3;
+          if (helmet.position.y < 0.17) { helmet.position.y = 0.17; helmetVel = null; helmet.rotation.set(0.1, 0.6, 0); sfx('thump'); }
+        }
+      }
+    } },
+  { dur: 5, start() {
+      say(['Он свободен.', 'Тишина.'], '');
+      setMusic('chill'); musicBus.frequency.value = 1400;
     }, update(t) {
       const k = ease(clamp(t / 5, 0, 1));
-      man.arms.forEach(a => { a.rotation.x = lerp(a.rotation.x, 0, 0.03); a.rotation.z = lerp(a.rotation.z, 0, 0.03); });
-      man.head.rotation.z = lerp(man.head.rotation.z, 0, 0.05);
-      man.g.rotation.y = lerp(man.g.rotation.y, 0, 0.05);
-      lamp.intensity = Math.max(0, 9 - t * 3);
-      visorMat.color.setHex(Math.random() < 0.1 ? 0xffffff : 0xff2020);
-      camAt(0, 1.72, lerp(2.0, -0.1, k), 0, 1.72, -0.6);
-      drawStatic(k * 0.3);
+      camAt(lerp(0, 2.6, k), lerp(1.6, 2.1, k), lerp(2.6, 3.2, k), 0.3, 0.9, -0.3);
+      man.head.rotation.x = lerp(man.head.rotation.x, 0.45, 0.04);
+      man.body.scale.y = 1 + Math.sin(t * 2.4) * 0.015;
+    } },
+  { dur: 5.2, update(t, dt, f) {
+      const h = helmet.position;
+      camAt(h.x + 0.7, 0.4, h.z + 0.9, h.x, h.y, h.z);
+      if (t > 2.0) once(f, 'stop', () => { setMusic(null); sfx('whisper'); });
+      if (t > 2.0 && t < 3.0) visorMat.color.setHex(Math.random() < 0.5 ? 0xffc23a : 0x111111);
+      if (t > 3.0) once(f, 'gold', () => { visorMat.color.setHex(0xffc23a); sfx('static'); drawStatic(0.2); });
+      if (t > 4.2) once(f, 'black', () => { drawStatic(0); fadeTo(1, 0.15, '#000'); });
     } },
 ];
 
@@ -690,16 +878,21 @@ const P = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, ground: null, coyote: 0, jump
 const PR = 0.3, PH = 1.7, G = 24, JUMP = 8.6, SPEED = 6.2;
 let yaw = 0, pitch = 0, t = 0, bob = 0;
 let glitchT = 0, spike = 0, aiJumpT = 0, shake = 0;
-let endAttempts = 0, allowRemove = false, zoomT = 0, pausedFrom = 'play';
+let endAttempts = 0, allowRemove = false, pausedFrom = 'play';
+let mode = 'stages', killT = 0, runT = 0, hunterZ = 10, hunterWalk = 0, stompT = 0, runLine = 0;
+let eatT = 0, eatFrom = 'play', eatDone = null;
 const keys = {};
+const LOOK_STATES = ['play', 'ending', 'kill', 'run'];
 
 function startStage(i, first = false) {
+  mode = 'stages';
   stage = i; cfg = STAGES[i];
   clearDialog();
   buildStage(i); applyStageLook(cfg);
   activeScene = vr;
   P.x = 0; P.y = 0; P.z = 1.2; P.vx = P.vy = P.vz = 0; P.ground = null;
   yaw = 0; pitch = 0; aiJumpT = 0;
+  ai.visible = true; hunter.g.visible = false;
   ai.position.set(1.8, 2.2, -3); ai.scale.setScalar([1, 1, 1.15, 1.35, 1.8][i]);
   dlg.glitch = cfg.glitch;
   setMusic(cfg.music); if (musicBus) musicBus.frequency.value = 6000;
@@ -721,11 +914,70 @@ function completeStage() {
   setTimeout(() => { if (stage < 4) startStage(stage + 1); else startEnding(); }, 900);
 }
 function respawn() {
-  sfx('fall');
+  if (mode === 'corridor') { resetCorridor(); return; }
   P.x = 0; P.y = 0; P.z = 1.2; P.vx = P.vy = P.vz = 0; P.ground = null;
   fadeFrom('#000', 0.5, 0.85);
   if (!dlg.cur && !dlg.q.length) say([FALL_LINES[stage]], 'ЭХО');
   for (const b of solids) if (b.vanish) { b.state = 'idle'; b.solid = true; b.mesh.visible = true; }
+}
+
+// ---------- the square one eats you ----------
+function eaten(onDone) {
+  eatFrom = state; state = 'eaten'; eatT = 0; eatDone = onDone;
+  activeScene = voidScene;
+  hide('cross');
+  hero.g.visible = true; hero.g.scale.setScalar(1); hero.g.rotation.set(0, 0, 0);
+  hero.legs.forEach(l => l.rotation.set(0, 0, 0));
+  eater.g.position.set(0, -6, -1.6); eater.g.rotation.set(0, 0, 0);
+  hide('dlg'); hide('stage');
+  eater.upper.rotation.x = 0;
+  eater.arms[1].rotation.x = 0; eater.spear.rotation.x = Math.PI;
+  eaten.roared = false;
+  sfx('fall');
+}
+function updateEaten(dt) {
+  eatT += dt;
+  const T = eatT;
+  let sh = 0;
+  const feet = -2.0;
+  if (T < 1.75) {
+    hero.g.position.y = 1.0 - T * 0.3;
+    hero.arms[0].rotation.x = -2.5 + Math.sin(T * 15) * 0.6; hero.arms[1].rotation.x = -2.5 - Math.sin(T * 15) * 0.6;
+    hero.legs[0].rotation.x = Math.sin(T * 12) * 0.5; hero.legs[1].rotation.x = -Math.sin(T * 12) * 0.5;
+    hero.g.rotation.z = Math.sin(T * 3) * 0.2;
+  }
+  const rise = ease(clamp((T - 0.15) / 0.7, 0, 1));
+  let ez = -1.6;
+  if (T > 1.4) ez = lerp(-1.6, -0.6, ease(clamp((T - 1.4) / 0.35, 0, 1)));
+  eater.g.position.set(0, lerp(-6, feet, rise), ez);
+  if (T < 1.75) {
+    eater.upper.rotation.x = -2.4 * ease(clamp((T - 0.9) / 0.45, 0, 1));
+    if (T > 0.9 && !eaten.roared) { eaten.roared = true; sfx('roar'); }
+    voidRed.intensity = 1.5 + 4 * clamp((T - 0.9) / 0.45, 0, 1);
+  }
+  if (T > 1.4 && T < 1.75) {
+    const k = ease((T - 1.4) / 0.35);
+    hero.g.position.set(0, lerp(hero.g.position.y, feet + 3.0, k), lerp(0, ez + 0.47, k));
+    hero.g.scale.setScalar(lerp(1, 0.45, k));
+  }
+  if (T >= 1.75) {
+    if (hero.g.visible) {
+      hero.g.visible = false; sfx('crunch'); eaten.roared = false;
+      const fl = $('flash'); fl.style.transition = 'none'; fl.style.opacity = 0.5; void fl.offsetWidth; fl.style.transition = 'opacity .5s'; fl.style.opacity = 0;
+    }
+    eater.upper.rotation.x = -Math.abs(Math.sin(T * 10)) * 0.4;
+    voidRed.intensity = 1.5;
+    eater.g.rotation.y = lerp(eater.g.rotation.y, Math.atan2(2.4, 4.2 - ez), 0.05);
+    sh = T < 2.1 ? 0.6 : 0.1;
+  }
+  camAt(2.8 + rand(-sh, sh) * 0.1, 1.7 + rand(-sh, sh) * 0.1, 5.0, 0, 1.3, -0.6);
+  drawStatic(T > 2.3 ? clamp((T - 2.3) * 1.4, 0, 0.95) : 0);
+  if (T > 3.0) {
+    drawStatic(0);
+    activeScene = vr; show('cross'); if (mode === 'stages') show('stage');
+    state = eatFrom;
+    if (eatDone) eatDone();
+  }
 }
 
 function hit(b) {
@@ -780,8 +1032,10 @@ function updatePlayer(dt) {
   if (P.ground && P.ground.vanish && P.ground.state === 'idle') { P.ground.state = 'shake'; P.ground.timer = 0.55; }
   if (P.ground && l > 0) bob += dt * 11;
 
-  if (P.y < lowestY - 18) respawn();
-  if (finish && Math.hypot(P.x - finish.x, P.z - finish.z) < 1.3 && Math.abs(P.y - finish.top) < 1.5) completeStage();
+  if (P.y < lowestY - 7) { eaten(respawn); return; }
+  if (finish && Math.hypot(P.x - finish.x, P.z - finish.z) < 1.3 && Math.abs(P.y - finish.top) < 1.5) {
+    if (mode === 'corridor') completeCorridor(); else completeStage();
+  }
 }
 
 function updateAI(dt) {
@@ -801,13 +1055,15 @@ function updateAI(dt) {
   ai.lookAt(camera.position);
   aiMouth.scale.y = aiTalking() ? 1 + Math.abs(Math.sin(t * 22)) * 3 : 1;
   aiHalo.rotation.z += dt;
-  const g = state === 'zoom' ? 1 : cfg.glitch;
+  glitchAIFace(cfg.glitch);
+  aiEyes.forEach(e => e.scale.y = Math.random() < 0.01 ? 0.1 : (stage >= 3 ? 1.8 : 1));
+}
+function glitchAIFace(g) {
   if (g > 0 && Math.random() < 0.3) {
     const pos = aiHeadGeo.attributes.position.array;
     for (let i = 0; i < pos.length; i++) pos[i] = aiOrig[i] + (Math.random() < g * 0.4 ? rand(-1, 1) * g * 0.15 : 0);
     aiHeadGeo.attributes.position.needsUpdate = true; aiHeadGeo.computeVertexNormals();
   }
-  aiEyes.forEach(e => e.scale.y = Math.random() < 0.01 ? 0.1 : (stage >= 3 ? 1.8 : 1));
 }
 
 function updateWatchers() {
@@ -831,7 +1087,7 @@ function updateGlitch(dt) {
   if (stage === 4 && state === 'play') $('stage').textContent = Math.random() < 0.1 ? 'СТАДИЯ ?/5' : (Math.random() < 0.05 ? 'НЕ УХОДИ' : 'СТАДИЯ 5/5');
 }
 
-// ---------- ending ----------
+// ---------- ending: helmet won't come off ----------
 function startEnding() {
   state = 'ending'; stage = 4; cfg = STAGES[4];
   clearDialog();
@@ -857,25 +1113,113 @@ function tryRemove() {
   dlg.glitch = 0.15 + endAttempts * 0.15;
   say([END_LINES[endAttempts - 1]], 'ЭХО', () => {
     if (endAttempts < END_LINES.length) { allowRemove = true; $('prompt').textContent = '[E] СНЯТЬ ШЛЕМ'; }
-    else { state = 'zoom'; zoomT = 0; $('prompt').textContent = ''; }
+    else startKill();
   });
 }
-function updateZoom(dt) {
-  zoomT += dt;
-  ai.position.lerp(camera.position, dt * 0.9);
-  drawStatic(clamp(zoomT / 2.5, 0, 0.9));
-  if (Math.random() < 0.2) sfx('whisper');
-  if (zoomT > 2.6) {
-    state = 'cut-wait';
-    if (document.exitPointerLock) document.exitPointerLock();
-    hide('cross'); clearDialog(); drawStatic(0);
-    fadeTo(1, 0.05, '#000');
-    setTimeout(() => runCutscene(OUTRO, () => {
-      fadeTo(1, 0.1, '#000'); setDrone(0); drawStatic(0); clearDialog();
-      state = 'over';
-      setTimeout(() => show('end'), 1200);
-    }), 900);
+
+// ---------- the square one kills ECHO ----------
+let killDir = new THREE.Vector3();
+function startKill() {
+  state = 'kill'; killT = 0;
+  $('prompt').textContent = '';
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  killDir.set(fx, 0, fz);
+  hunter.g.visible = true;
+  const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  hunter.g.position.set(ai.position.x + fx * 1.9 + rx * 1.3, ai.position.y - 1.96, ai.position.z + fz * 1.9 + rz * 1.3);
+  hunter.g.rotation.set(0, Math.atan2(ai.position.x - hunter.g.position.x, ai.position.z - hunter.g.position.z) + 0.25, 0);
+  hunter.upper.rotation.x = 0; hunter.arms[1].rotation.x = 0; hunter.spear.rotation.x = Math.PI;
+  spike = 0.45; sfx('static'); sfx('thump');
+  dlg.glitch = 0.5;
+  say(['Нет…', 'Только не ты.'], 'ЭХО');
+}
+function updateKill(dt) {
+  killT += dt;
+  const T = killT;
+  if (ai.visible) {
+    const hp = new THREE.Vector3(); hunter.head.getWorldPosition(hp);
+    ai.lookAt(hp);
+    ai.position.x += rand(-0.02, 0.02); ai.position.y += rand(-0.02, 0.02);
+    glitchAIFace(0.8);
+    aiMouth.scale.y = aiTalking() ? 1 + Math.abs(Math.sin(t * 22)) * 3 : 1;
   }
+  if (T < 2.0) hunter.upper.rotation.x = -Math.abs(Math.sin(T * 2)) * 0.5;
+  if (T >= 2.0 && T < 2.25) {
+    hunter.upper.rotation.x = 0;
+    hunter.spear.rotation.x = 0;
+    hunter.arms[1].rotation.x = lerp(0, -Math.PI / 2, (T - 2.0) / 0.25);
+  }
+  if (T >= 2.25 && ai.visible) {
+    hunter.arms[1].rotation.x = -Math.PI / 2;
+    shatterAI(); sfx('shatter'); sfx('echoDie');
+    clearDialog(); setDrone(0);
+    spike = 0.5; shake = 0.6;
+    const fl = $('flash'); fl.style.background = '#fff'; fl.style.transition = 'none'; fl.style.opacity = 0.7; void fl.offsetWidth; fl.style.transition = 'opacity .5s'; fl.style.opacity = 0;
+    setTimeout(() => fl.style.background = '#f00', 600);
+  }
+  if (T > 3.0) hunter.arms[1].rotation.x = lerp(hunter.arms[1].rotation.x, 0, 0.05);
+  if (T > 3.0) {
+    const toP = Math.atan2(P.x - hunter.g.position.x, P.z - hunter.g.position.z);
+    hunter.g.rotation.y = lerp(hunter.g.rotation.y, toP, 0.06);
+  }
+  if (T > 3.6) {
+    hunter.upper.rotation.x = lerp(hunter.upper.rotation.x, -2.4, 0.12);
+    once(updateKill, 'roar', () => sfx('roar'));
+  }
+  if (T > 4.4) once(updateKill, 'run', () => { $('title').style.color = '#ff2a2a'; $('title').style.fontSize = 'clamp(48px,14vw,120px)'; title('БЕГИ'); });
+  if (T > 5.4) { title('', false); setTimeout(() => { $('title').style.color = ''; $('title').style.fontSize = ''; }, 900); startCorridor(); }
+}
+
+// ---------- the glitch corridor escape ----------
+function startCorridor() {
+  mode = 'corridor';
+  buildCorridor(); applyStageLook(CORR);
+  ai.visible = false;
+  dlg.glitch = 0.6; clearDialog();
+  setMusic('run'); setDrone(0.06);
+  runLine = 0;
+  resetCorridor(true);
+  state = 'run';
+  show('cross'); hide('stage');
+}
+function resetCorridor(first = false) {
+  P.x = 0; P.y = 0; P.z = 1; P.vx = P.vy = P.vz = 0; P.ground = null;
+  yaw = 0; pitch = 0;
+  hunterZ = 10; runT = 0;
+  hunter.g.visible = true;
+  hunter.g.rotation.set(0, Math.PI, 0);
+  hunter.spear.rotation.x = 0;
+  fadeFrom('#000', first ? 0.3 : 0.5, first ? 1 : 0.85);
+}
+function updateHunter(dt) {
+  runT += dt;
+  const sp = runT < 1.5 ? 0 : Math.min(5.6, 4.6 + (runT - 1.5) * 0.03);
+  hunterZ -= sp * dt;
+  hunterWalk += dt * sp * 1.7;
+  hunter.g.position.set(0, 0, hunterZ);
+  hunter.legs[0].rotation.x = Math.sin(hunterWalk) * 0.7; hunter.legs[1].rotation.x = -Math.sin(hunterWalk) * 0.7;
+  hunter.arms[0].rotation.x = -Math.sin(hunterWalk) * 0.6;
+  hunter.arms[1].rotation.x = -1.2;
+  hunter.upper.rotation.x = -1.4 - Math.sin(t * 8) * 0.6;
+  stompT -= dt * sp;
+  if (stompT <= 0 && sp > 0) { sfx('stomp'); stompT = 1.7; }
+  const dist = hunterZ - P.z;
+  spike = Math.max(spike, clamp(1 - dist / 12, 0, 1) * 0.35);
+  if (dist < 1.3) eaten(respawn);
+  if (runLine < RUN_LINES.length && P.z < RUN_LINES[runLine].z) { say([RUN_LINES[runLine].text], 'ЭХО'); runLine++; }
+}
+function completeCorridor() {
+  state = 'cut-wait';
+  if (document.exitPointerLock) document.exitPointerLock();
+  hide('cross'); clearDialog(); drawStatic(0);
+  setMusic(null); setDrone(0);
+  sfx('portal');
+  fadeTo(1, 0.4, '#fff');
+  setTimeout(() => runCutscene(OUTRO, () => {
+    fadeTo(1, 0.1, '#000'); drawStatic(0); clearDialog();
+    state = 'over';
+    setTimeout(() => show('end'), 1200);
+  }), 800);
 }
 
 // =====================================================================
@@ -887,14 +1231,14 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   keys[e.code] = true;
   if (e.code === 'Enter') { if (state === 'cut' && shots === INTRO && !dlg.cur) skipIntro(); else advanceDialog(); }
-  if (state === 'play' && e.code === 'Space') P.jumpBuf = 0.13;
+  if ((state === 'play' || state === 'run') && e.code === 'Space') P.jumpBuf = 0.13;
   if (state === 'ending' && e.code === 'KeyE') tryRemove();
   if (e.code === 'Escape' && noLock) pauseGame();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 document.addEventListener('mousemove', e => {
-  if (state !== 'play' && state !== 'ending' && state !== 'zoom') return;
+  if (!LOOK_STATES.includes(state)) return;
   const locked = document.pointerLockElement === canvas;
   if (!locked && !(noLock && (e.buttons & 1))) return;
   const k = locked ? 0.0022 : 0.005;
@@ -902,7 +1246,7 @@ document.addEventListener('mousemove', e => {
   pitch = clamp(pitch - e.movementY * k, -1.45, 1.45);
 });
 function pauseGame() {
-  if (state !== 'play' && state !== 'ending') return;
+  if (!LOOK_STATES.includes(state)) return;
   pausedFrom = state; state = 'paused';
   $('pauseTitle').textContent = 'ПАУЗА'; $('pauseText').textContent = ''; $('resume').textContent = 'Продолжить';
   show('pause');
@@ -937,11 +1281,19 @@ function loop() {
   } else if (state === 'cut') {
     updateCut(dt); updateDialog(dt); updateNotes(dt);
   } else if (state === 'play') {
-    updatePlatforms(dt); updatePlayer(dt); updateAI(dt); updateWatchers(); updateGlitch(dt); updateDialog(dt);
+    updatePlatforms(dt); updatePlayer(dt);
+    if (state === 'play') { updateAI(dt); updateWatchers(); updateGlitch(dt); }
+    updateDialog(dt);
   } else if (state === 'ending') {
     updateAI(dt); updateGlitch(dt); updateDialog(dt);
-  } else if (state === 'zoom') {
-    updateAI(dt); updateZoom(dt); updateDialog(dt);
+  } else if (state === 'kill') {
+    updateKill(dt); updateShards(dt); updateGlitch(dt); updateDialog(dt);
+  } else if (state === 'run') {
+    updatePlayer(dt);
+    if (state === 'run') { updateHunter(dt); updateCorridorGlitch(); updateGlitch(dt); }
+    updateShards(dt); updateDialog(dt);
+  } else if (state === 'eaten') {
+    updateEaten(dt);
   } else if (state === 'trans') {
     updateDialog(dt);
   }
